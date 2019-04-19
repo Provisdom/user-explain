@@ -15,7 +15,7 @@ jobs:
       - checkout
       - cache/clj:
           steps:
-            - clojure -A:test:run-tests
+            - run: clojure -A:test:run-tests
 
 workflows:
   version: 2
