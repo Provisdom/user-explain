@@ -2,7 +2,8 @@
   (:require
     [clojure.spec.alpha :as s]
     [clojure.walk :as walk]
-    [clojure.core.match :as match]))
+    [clojure.core.match :as match]
+    [flatland.ordered.map :as ordered-map]))
 
 (comment
   (match/match '[(clojure.core/fn [%] (clojure.core/contains? % :workload/impacts))]
@@ -35,13 +36,13 @@
     :else form))
 
 ;; todo - parameterize this
-(defonce matchers (atom (sorted-map)))
+(defonce matchers (atom (ordered-map/ordered-map)))
 
 (defn add-explainer-form
   [matcher body-form]
   (swap! matchers (fn [matchers]
                     (assoc matchers
-                      [(count matchers) body-form]
+                      body-form
                       {:matcher matcher
                        :body    body-form}))))
 
@@ -59,14 +60,15 @@
         match-bindings (mapcat (fn [{:keys [matcher body]}]
                                  [[matcher] body])
                                (vals problem-matchers))]
-    `(when-let [explain-data# (s/explain-data ~spec ~val)]
+    `(if-let [explain-data# (s/explain-data ~spec ~val)]
        (let [problems# (-> explain-data#
                            ::s/problems
                            (first)
                            (merge (select-keys explain-data# [::s/value ::s/spec])))]
          (match/match [problems#]
-           ~@match-bindings)))))
+           ~@match-bindings))
+       )))
 
 (defn clear!
   []
-  (reset! matchers (sorted-map)))
+  (reset! matchers (ordered-map/ordered-map)))
