@@ -35,12 +35,15 @@
     :else form))
 
 ;; todo - parameterize this
-(defonce matchers (atom []))
+(defonce matchers (atom (sorted-map)))
 
 (defn add-explainer-form
   [matcher body-form]
-  (swap! matchers conj {:matcher matcher
-                        :body    body-form}))
+  (swap! matchers (fn [matchers]
+                    (assoc matchers
+                      [(count matchers) body-form]
+                      {:matcher matcher
+                       :body    body-form}))))
 
 (defmacro defexplainer
   [problem-matcher & body]
@@ -52,11 +55,10 @@
 
 (defmacro explain-first
   [spec val]
-  (let [;; matchers that specify :via should be matched first
-        problem-matchers @matchers
+  (let [problem-matchers @matchers
         match-bindings (mapcat (fn [{:keys [matcher body]}]
                                  [[matcher] body])
-                               problem-matchers)]
+                               (vals problem-matchers))]
     `(when-let [explain-data# (s/explain-data ~spec ~val)]
        (let [problems# (-> explain-data#
                            ::s/problems
@@ -67,4 +69,4 @@
 
 (defn clear!
   []
-  (reset! matchers []))
+  (reset! matchers (sorted-map)))
