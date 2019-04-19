@@ -30,15 +30,15 @@
 (deftest explain-first-test
 
   (splain/defexplainer
-    {:pred #(contains? _ kw)
-     :via  [::user & r]}
+    {::splain/pred #(contains? _ kw)
+     :via          [::user & r]}
     (str "Missing " (stringify kw) "."))
 
   (splain/defexplainer
-    {:pred     not-blank?
-     :via      [::user & r]
-     :path     path
-     ::s/value full-val}
+    {::splain/pred not-blank?
+     :via          [::user & r]
+     :path         path
+     ::s/value     full-val}
     (str "A " (stringify (last path)) " cannot be blank."))
 
   (splain/defexplainer

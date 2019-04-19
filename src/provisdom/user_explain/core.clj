@@ -50,7 +50,7 @@
   [problem-matcher & body]
   (add-explainer-form
     (cond-> problem-matcher
-      (:pred problem-matcher) (update :pred (comp form-as-match res)))
+      (and (::pred problem-matcher)) (update ::pred (comp form-as-match res)))
     (cons 'do body))
   nil)
 
@@ -61,11 +61,12 @@
                                  [[matcher] body])
                                (vals problem-matchers))]
     `(if-let [explain-data# (s/explain-data ~spec ~val)]
-       (let [problems# (-> explain-data#
-                           ::s/problems
-                           (first)
-                           (merge (select-keys explain-data# [::s/value ::s/spec])))]
-         (match/match [problems#]
+       (let [problem# (-> explain-data#
+                          ::s/problems
+                          (first)
+                          (merge (select-keys explain-data# [::s/value ::s/spec])))
+             problem# (assoc problem# ::pred (:pred problem#))]
+         (match/match [problem#]
            ~@match-bindings))
        )))
 
