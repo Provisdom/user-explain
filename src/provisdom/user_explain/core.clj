@@ -42,7 +42,7 @@
   [matcher body-form]
   (swap! matchers (fn [matchers]
                     (assoc matchers
-                      body-form
+                      matcher
                       {:matcher matcher
                        :body    body-form}))))
 
