@@ -34,24 +34,31 @@
     (symbol? form) `(quote ~form)
     :else form))
 
-(defn first-problem
+(defn get-spec-problems
+  "Returns a list of normalized spec problem maps."
   [ed]
-  (let [problem (-> ed
-                    ::s/problems
-                    (first)
-                    (merge (select-keys ed [::s/value ::s/spec])))]
-    (assoc problem ::pred (:pred problem))))
+  (map (fn [problem]
+         (-> problem
+             ;; include ::s/value so the full, top-level value is available in any
+             ;; explainer.
+             (merge (select-keys ed [::s/value ::s/spec]))
+             ;; copy :pred to ::pred so we preserve the original explain-data
+             ;; ::pred will get transformed to a match-form.
+             (assoc ::pred (:pred problem))))
+       (::s/problems ed)))
 
 (defmacro defexplainer
   [sym problem-matcher & body]
   (let [matcher (cond-> problem-matcher
-                  (and (::pred problem-matcher)) (update ::pred (comp form-as-match res)))]
+                  (::pred problem-matcher) (update ::pred (comp form-as-match res)))]
     `(defn ~sym
        [explain-data#]
-       (let [problem# (first-problem explain-data#)]
-         (match/match [problem#]
-           ~[matcher] (do ~@body)
-           :else nil)))))
+       ;; return the first matched problem
+       (some (fn [problem#]
+               (match/match [problem#]
+                 ~[matcher] (do ~@body)
+                 :else nil))
+             (get-spec-problems explain-data#)))))
 
 (comment
   (defexplainer
@@ -61,14 +68,15 @@
     (str "Missing " (stringify kw) "."))
   )
 
-(defn default-explainer
+(defn clojure-spec-explainer
+  "An explainer that will use Spec's explain printer to print the error message."
   [explain-data]
   (when explain-data (with-out-str (s/explain-out explain-data))))
 
 (defn explain-first
-  ([spec val matchers] (explain-first spec val matchers default-explainer))
-  ([spec val match-fns default-matcher]
+  ([spec val explainers] (explain-first spec val explainers clojure-spec-explainer))
+  ([spec val explainers default-explainer]
    (let [explain-data (s/explain-data spec val)
-         match-fns (conj (vec match-fns) default-matcher)]
+         match-fns (conj (vec explainers) default-explainer)]
      (some (fn [match-fn]
              (match-fn explain-data)) match-fns))))
