@@ -2,8 +2,7 @@
   (:require
     [clojure.spec.alpha :as s]
     [clojure.walk :as walk]
-    [clojure.core.match :as match]
-    [flatland.ordered.map :as ordered-map]))
+    [clojure.core.match :as match]))
 
 (comment
   (match/match '[(clojure.core/fn [%] (clojure.core/contains? % :workload/impacts))]
@@ -35,41 +34,41 @@
     (symbol? form) `(quote ~form)
     :else form))
 
-;; todo - parameterize this
-(defonce matchers (atom (ordered-map/ordered-map)))
-
-(defn add-explainer-form
-  [matcher body-form]
-  (swap! matchers (fn [matchers]
-                    (assoc matchers
-                      matcher
-                      {:matcher matcher
-                       :body    body-form}))))
+(defn first-problem
+  [ed]
+  (let [problem (-> ed
+                    ::s/problems
+                    (first)
+                    (merge (select-keys ed [::s/value ::s/spec])))]
+    (assoc problem ::pred (:pred problem))))
 
 (defmacro defexplainer
-  [problem-matcher & body]
-  (add-explainer-form
-    (cond-> problem-matcher
-      (and (::pred problem-matcher)) (update ::pred (comp form-as-match res)))
-    (cons 'do body))
-  nil)
-
-(defmacro explain-first
-  [spec val]
-  (let [problem-matchers @matchers
-        match-bindings (mapcat (fn [{:keys [matcher body]}]
-                                 [[matcher] body])
-                               (vals problem-matchers))]
-    `(if-let [explain-data# (s/explain-data ~spec ~val)]
-       (let [problem# (-> explain-data#
-                          ::s/problems
-                          (first)
-                          (merge (select-keys explain-data# [::s/value ::s/spec])))
-             problem# (assoc problem# ::pred (:pred problem#))]
+  [sym problem-matcher & body]
+  (let [matcher (cond-> problem-matcher
+                  (and (::pred problem-matcher)) (update ::pred (comp form-as-match res)))]
+    `(defn ~sym
+       [explain-data#]
+       (let [problem# (first-problem explain-data#)]
          (match/match [problem#]
-           ~@match-bindings))
-       )))
+           ~[matcher] (do ~@body)
+           :else nil)))))
 
-(defn clear!
-  []
-  (reset! matchers (ordered-map/ordered-map)))
+(comment
+  (defexplainer
+    contains-explainer
+    {::pred #(contains? _ kw)
+     :via   [::user & r]}
+    (str "Missing " (stringify kw) "."))
+  )
+
+(defn default-explainer
+  [explain-data]
+  (when explain-data (with-out-str (s/explain-out explain-data))))
+
+(defn explain-first
+  ([spec val matchers] (explain-first spec val matchers default-explainer))
+  ([spec val match-fns default-matcher]
+   (let [explain-data (s/explain-data spec val)
+         match-fns (conj (vec match-fns) default-matcher)]
+     (some (fn [match-fn]
+             (match-fn explain-data)) match-fns))))
